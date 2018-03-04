@@ -80,7 +80,7 @@ class TradeData(object):
 		vol    = self.df_s.iloc[:,4].resample(level).sum()  # period volume
 		usdvol = self.df_s.loc[:, ex+'_usd_volume'].resample(level).sum()  # period usd volume
 
-		aggregated = lowp.join(highp).join(openp).join(closep).join(vol).join(usdvol)
+		aggregated = lowp.to_frame().join(highp).join(openp).join(closep).join(vol).join(usdvol)
 
 		aggregated[ex + '_return'] = (aggregated.iloc[:,3] - aggregated.iloc[:,2]) / aggregated.iloc[:,2]
 
@@ -96,3 +96,4 @@ class TradeData(object):
 		self.df_m = self.aggregate_df('min')
 		self.df_h = self.aggregate_df('H')
 		self.df_d = self.aggregate_df('D')
+		print("""Second-level data have been cleaned and are accessible as .df_s\nMinute, hour, and day-level data are available as .df_m, .df_h, and .df_d, respectively.""")

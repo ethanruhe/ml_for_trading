@@ -1,2 +1,4 @@
 .DS_Store
 .ipynb_checkpoints/
+*.pyc
+/ml4t/__pychache__/
