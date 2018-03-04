@@ -61,7 +61,7 @@ class TradeData(object):
 			calculations of USD value.
 		"""
 		ex = self.df_s.columns[0][:-4]  # Exhcange name
-		self.df_s[ex + '_usd_volume'] = (self.df_s.iloc[:,2] + self.df_s.iloc[:,3]) / 2.0 * self.df_s.iloc[:,4]
+		self.df_s[ex + '_usd_vol'] = (self.df_s.iloc[:,2] + self.df_s.iloc[:,3]) / 2.0 * self.df_s.iloc[:,4]
 
 
 	def calc_pct_return(self):
@@ -78,7 +78,7 @@ class TradeData(object):
 		openp  = self.df_s.iloc[:,2].resample(level).first()  # period open
 		closep = self.df_s.iloc[:,3].resample(level).last()  # period close
 		vol    = self.df_s.iloc[:,4].resample(level).sum()  # period volume
-		usdvol = self.df_s.loc[:, ex+'_usd_volume'].resample(level).sum()  # period usd volume
+		usdvol = self.df_s.loc[:, ex+'_usd_vol'].resample(level).sum()  # period usd volume
 
 		aggregated = lowp.to_frame().join(highp).join(openp).join(closep).join(vol).join(usdvol)
 
