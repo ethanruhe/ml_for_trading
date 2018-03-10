@@ -1,17 +1,25 @@
 """
 Ethan Ruhe
+#TODO: Add logs to save data cleaning details
+#TODO: Add tests
+#TODO: Refactor to allow for predicting +/-= return, or % return
+#TODO: Refactor to allow for predicting return X periods into the future
 """
 import numpy as np
 import pandas as pd
+from sklearn.utils import resample
 
 def calc_static_features(df_input):
-	"""Calcualte features that do not depend on rolling metrics.
+	"""Calcualte features that do not depend on rolling metrics:
+			> return one period ago
+			> number of periods with positive return in a row
+			> number of periods with negative return in a row
 
 		Args:
 			df: candlestick trade data with low, high, open, close, vol, usd_vol variables in df with time index
 
 		Return:
-			df of features
+			df of static features; index is same as input
 	"""
 	df = pd.DataFrame(index=df_input.index)
 	ex = df_input.columns[0][:-4]  # Exhcange name
@@ -44,16 +52,23 @@ def calc_static_features(df_input):
 
 	df[pos_momentum_var] = positive_return * return_momentum
 	df[neg_momentum_var] = negative_return * return_momentum
-	df[return_var + '_pos'] = positive_return
+	#df[pos_flag] = positive_return
 
-	return df.loc[:, [return_var_lag1, pos_momentum_var, neg_momentum_var, pos_flag]]
+	#return df.loc[:, [return_var_lag1, pos_momentum_var, neg_momentum_var, pos_flag]]
+	return df.loc[:, [return_var_lag1, pos_momentum_var, neg_momentum_var]]
+
 
 def calc_rolling_features(df_input, n=10):
 	"""Calculate normalized features for clean candlestick data.
+		> Normalized dispersion of closing price
+		> STD's from mean of closing price
+		> Normalized dispersion of USD volume
+		> STD's from mean of USD volume
+		> Rolling mean return
 
 		Args:
 			df: candlestick trade data with low, high, open, close, vol, usd_vol variables in df with time index
-			n: periods overwhich to calculate rolling stats
+			n: list of periods overwhich to calculate rolling stats
 
 		Return:
 			df of features
@@ -105,11 +120,75 @@ def calc_rolling_features(df_input, n=10):
 	usd_vol_stds_var = usd_vol_var + '_stds_' + str(n)
 	df[usd_vol_stds_var] = (df_input[usd_vol_var] - rm_usd_vol) / rstd_usd_vol
 
-	############################################################
-	# Correct
-	############################################################
-	#df.replace([np.inf, -np.inf], np.nan, inplace=True)
-	#df.fillna(0.0, inplace=True)
-
 	return df.loc[:, [stdmag_var, stds_var, rm_returns_var, usd_vol_stdmag_var, usd_vol_stds_var]]
 
+
+def calc_features(df, rolling_periods=[10], upsample=True, y_binary=True):
+	"""For input df, return static features, rolling features for each period in list, and dependent var
+
+	Args:
+		df: trade_data.df_m most likely; assumes similar format
+		rolling_periods: list windows over which to calculate rolling stats
+		upsample: balance number of positive and negative return obs by upsampling minority class in data
+		y_binary: use actual period return % as dependent var, or is-positive Boolean
+
+	Return:
+		Y, X
+	"""
+
+	ex = df.columns[0][:-4]  # Exhcange name
+	y  = ex + '_return'  # Var to be predicted
+
+	# Calc static features
+	# Includes '_return_pos' flag, used as Y
+	output = calc_static_features(df)
+	
+	# For each rolling period window, calc rolling features
+	for i in rolling_periods:
+		output = output.join(calc_rolling_features(df, n=i))
+
+	# Remove leading obs for which fulll rolling stats couldn't be calculated
+	output = output.iloc[max(rolling_periods)-1:,:]
+
+	# Set NaNs to 0.0
+	# In _stdmag_, occurs when rollling mean is 0; e.g., in vol data when no trading
+	# In _stds_, can occur when std is 0; e.g., when price or vol are stable
+	#TODO: log what was NaN (output.isna().sum()) before updating
+	output[output.isna()] = 0.0
+
+	# Join return column from df
+	output = output.join(df[y])
+
+	# Resample minority class to achieve 50/50 split
+	df_return_pos = output[output[y] > 0.0]
+	df_return_neg = output[output[y] <= 0.0]
+
+	# Resample minority class to as many obs as majority
+	#TODO: log positive/negative return split in training data
+	negatives = df_return_neg.shape[0]
+	positives = df_return_pos.shape[0]
+
+	if negatives > positives:
+	    df_return_pos_resampled = resample(df_return_pos, 
+	                                     replace=True,        # with replacement
+	                                     n_samples=negatives, # create 50-50 spilt
+	                                     random_state=42)     # reproducible results 
+	    output_resampled = pd.concat([df_return_neg, df_return_pos_resampled])
+
+	elif positives > negatives:
+	    df_return_neg_resampled = resample(df_return_neg, 
+	                                     replace=True,        # with replacement
+	                                     n_samples=positives, # create 50-50 spilt
+	                                     random_state=42)     # reproducible results   
+	    output_resampled = pd.concat([df_return_pos, df_return_neg_resampled])
+	else:
+	    output_resampled = pd.concat([df_return_pos, df_return_neg])
+
+
+	Y = output_resampled[y]
+	if y_binary:
+		Y = Y > 0.0
+
+	X = output_resampled.drop(columns=[y])
+
+	return Y, X
