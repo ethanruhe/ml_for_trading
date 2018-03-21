@@ -8,8 +8,8 @@ import pandas as pd
 class TradeData(object):
 	"""Candle stick trade data object.
 
-	Takes by-second candle stick trade data for single currency. Assumes format
-	is Pandas df with second index and columns in the following order:
+	Takes by-second candle stick trade data (aggregated every 60 seconds) for single currency.
+	Assumes format is Pandas df with second index and columns in the following order:
 		0: low_price
 		1: high_price
 		2: open_price
@@ -57,7 +57,7 @@ class TradeData(object):
 	def calc_usd_vol(self):
 		"""Calculate the approximate USD value of coins traded in period.
 			Assumes a uniform distribution of price from open to close in period.
-			Large movements from open to close may result in grossly inaccurate
+			Large movements from open to close may result in inaccurate
 			calculations of USD value.
 		"""
 		ex = self.df_s.columns[0][:-4]  # Exhcange name
@@ -87,8 +87,8 @@ class TradeData(object):
 		return aggregated
 
 
-	def clean_df_s(self):
-		"""Clean raw by-second data."""
+	def clean_df_m(self):
+		"""Clean raw by-minute data."""
 		self.fill_forward()
 		self.calc_usd_vol()
 		self.calc_pct_return()
@@ -96,4 +96,4 @@ class TradeData(object):
 		self.df_m = self.aggregate_df('min')
 		self.df_h = self.aggregate_df('H')
 		self.df_d = self.aggregate_df('D')
-		print("""Second-level data have been cleaned and are accessible as .df_s\nMinute, hour, and day-level data are available as .df_m, .df_h, and .df_d, respectively.""")
+		print("""Minute-level data have been cleaned.\nMinute, hour, and day-level data are available as .df_m, .df_h, and .df_d, respectively.""")
