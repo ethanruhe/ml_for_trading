@@ -250,7 +250,7 @@ def build_orders(dfprediction, abs_threshold=0.02, startin=False, symbol='USD-BT
     tshares = pd.Series(index=dfprediction.index)
     
     if startin: 
-        shares = 10
+        shares = 1
     else:
         shares = 0
 
@@ -261,7 +261,7 @@ def build_orders(dfprediction, abs_threshold=0.02, startin=False, symbol='USD-BT
         if dfprediction.loc[i + dt.timedelta(hours=1), 'y_hat'] < -1.0 * abs_threshold:      
 
             # if currently own -1: pass
-            if shares == -10:
+            if shares == -1:
                 pass
 
             # if currently own 0: get to net -1 share position
@@ -269,35 +269,41 @@ def build_orders(dfprediction, abs_threshold=0.02, startin=False, symbol='USD-BT
                 tsymbol.loc[i] = symbol  # trade symbol
                 torder.loc[i] = 'SELL'
                 tshares.loc[i] = 1
-                shares -= 10
+                shares -= 1
 
             # if currently own 1: get to net -1 share position
-            else:
+            elif shares == 1:
                 tsymbol.loc[i] = symbol  # trade symbol
                 torder.loc[i] = 'SELL'
-                tshares.loc[i] = 20
-                shares -= 20
+                tshares.loc[i] = 2
+                shares -= 2
+
+            else:
+                raise Exception("Unexpected share holdings. 0")
 
         # Buy when prediction > abs_threshold
         elif dfprediction.loc[i + dt.timedelta(hours=1), 'y_hat'] > abs_threshold:      
 
             # if currently own -1: get to net 1 share position
-            if shares == -10:
+            if shares == -1:
                 tsymbol.loc[i] = symbol  # trade symbol
                 torder.loc[i] = 'BUY'
-                tshares.loc[i] = 20
-                shares += 20
+                tshares.loc[i] = 2
+                shares += 2
 
             # if currently own 0: get to net 1 share position
             elif shares == 0:
                 tsymbol.loc[i] = symbol  # trade symbol
                 torder.loc[i] = 'BUY'
-                tshares.loc[i] = 10
-                shares += 10
+                tshares.loc[i] = 1
+                shares += 1
 
             # if currently own 1: pass
-            else:
+            elif shares == 1:
                 pass 
+
+            else:
+                raise Exception("Unexpected share holdings. 1")            
 
         # if predicted return is too small, pass
         else:
@@ -307,6 +313,78 @@ def build_orders(dfprediction, abs_threshold=0.02, startin=False, symbol='USD-BT
 
     return df_orders
 
+def port_strategy(dfprediction, abs_threshold=0.02, symbol='USD-BTC'):
+    """Create df of orders to make (at period close)
+    Expects input to have time index and 'y_hat' col that corresponds to predicted return for i
+    Output: columns=['exchange', 'order', 'order_vol'], index=df.index
+    Single currency, net holdings possible at -10, 0, 10
+    
+    TODO: vectorize once settled on format; bit more intuitive to manipulate non-vectorized but slow
+    """
+    # Build order info
+    tsymbol = pd.Series(index=dfprediction.index)
+    torder = pd.Series(index=dfprediction.index)
+    tport_pct = pd.Series(index=dfprediction.index)
+
+    net_position = 0
+    # if predicted return in i+1 suggests trade, input order in i
+    for i in dfprediction.index[:-1]:
+        
+        # Sell when prediction < -(abs_threshold)
+        if dfprediction.loc[i + dt.timedelta(hours=1), 'y_hat'] < -1.0 * abs_threshold:      
+
+            # if currently own -1: pass
+            if net_position == -1:
+                pass
+
+            # if currently own 0: get to net -1 share position
+            elif net_position == 0:
+                tsymbol.loc[i] = symbol  # trade symbol
+                torder.loc[i] = 'SELL'
+                tshares.loc[i] = 1
+                shares -= 1
+
+            # if currently own 1: get to net -1 share position
+            elif shares == 1:
+                tsymbol.loc[i] = symbol  # trade symbol
+                torder.loc[i] = 'SELL'
+                tshares.loc[i] = 2
+                shares -= 2
+
+            else:
+                raise Exception("Unexpected share holdings. 0")
+
+        # Buy when prediction > abs_threshold
+        elif dfprediction.loc[i + dt.timedelta(hours=1), 'y_hat'] > abs_threshold:      
+
+            # if currently own -1: get to net 1 share position
+            if shares == -1:
+                tsymbol.loc[i] = symbol  # trade symbol
+                torder.loc[i] = 'BUY'
+                tshares.loc[i] = 2
+                shares += 2
+
+            # if currently own 0: get to net 1 share position
+            elif shares == 0:
+                tsymbol.loc[i] = symbol  # trade symbol
+                torder.loc[i] = 'BUY'
+                tshares.loc[i] = 1
+                shares += 1
+
+            # if currently own 1: pass
+            elif shares == 1:
+                pass 
+
+            else:
+                raise Exception("Unexpected share holdings. 1")            
+
+        # if predicted return is too small, pass
+        else:
+            pass
+
+        df_orders = pd.concat({'Symbol': tsymbol, 'Order': torder, 'Shares': tshares}, axis=1).dropna()
+
+    return df_orders
 
 def compute_portvals(dforders, dfprices, trend, start_val=10000, commission=0.0029, impact=0.005):
     """Calculate by-period porfolio values.
