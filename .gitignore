@@ -3,3 +3,4 @@
 *.pyc
 /ml4t/__pychache__/
 /ml4t/scratch.py
+*.pdf
